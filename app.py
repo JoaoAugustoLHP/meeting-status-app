@@ -1,18 +1,10 @@
 from flask import Flask, request, jsonify, render_template_string
 from datetime import datetime
-import pytz
-import os
 
 app = Flask(__name__)
 
-# Define o fuso horário correto para Brasília
-fuso_brasilia = pytz.timezone('America/Sao_Paulo')
-
-# Armazena o status globalmente com o horário correto
-status = {
-    "status": "Disponível",
-    "last_updated": datetime.now(fuso_brasilia).strftime('%H:%M:%S')
-}
+# Armazena o status globalmente
+status = {"status": "Disponível", "last_updated": datetime.now().strftime('%H:%M:%S')}
 
 HTML_PAGE = """
 <!DOCTYPE html>
@@ -27,6 +19,7 @@ HTML_PAGE = """
         button { font-size: 18px; padding: 10px 20px; margin: 10px; cursor: pointer; border: none; border-radius: 5px; }
         .disponivel { background-color: green; color: white; }
         .reuniao { background-color: red; color: white; }
+        .externo { background-color: orange; color: white; }
     </style>
     <script>
         function updateStatus(newStatus) {
@@ -57,6 +50,8 @@ HTML_PAGE = """
                 document.body.style.backgroundColor = '#d4f8d4'; // Verde claro
             } else if (status === 'Em Reunião') {
                 document.body.style.backgroundColor = '#f5baba'; // Vermelho mais forte
+            } else if (status === 'Externo') {
+                document.body.style.backgroundColor = '#fce5b8'; // Amarelo claro
             }
         }
         
@@ -68,6 +63,7 @@ HTML_PAGE = """
     <p id='last-updated'>Última atualização: {{ status['last_updated'] }}</p>
     <button class='disponivel' onclick="updateStatus('Disponível')">Disponível 🟢</button>
     <button class='reuniao' onclick="updateStatus('Em Reunião')">Em Reunião 🔴</button>
+    <button class='externo' onclick="updateStatus('Externo')">Externo 🟡</button>
 </body>
 </html>
 """
@@ -81,7 +77,7 @@ def update_status():
     global status
     new_status = request.json.get("status")
     status["status"] = new_status
-    status["last_updated"] = datetime.now(fuso_brasilia).strftime('%H:%M:%S')
+    status["last_updated"] = datetime.now().strftime('%H:%M:%S')
     return jsonify(status)
 
 @app.route('/get_status', methods=['GET'])
@@ -89,5 +85,7 @@ def get_status():
     return jsonify(status)
 
 if __name__ == '__main__':
+    import os
+
     port = int(os.environ.get("PORT", 5000))  # Pega a porta do ambiente ou usa 5000 como padrão
     app.run(debug=True, host='0.0.0.0', port=port)
