@@ -1,10 +1,14 @@
 from flask import Flask, request, jsonify, render_template_string
 from datetime import datetime
+import pytz  # Certifique-se de que 'pytz' está instalado
 
 app = Flask(__name__)
 
+# Definição do fuso horário correto
+fuso_brasilia = pytz.timezone("America/Sao_Paulo")
+
 # Armazena o status globalmente
-status = {"status": "Disponível", "last_updated": datetime.now().strftime('%H:%M:%S')}
+status = {"status": "Disponível", "last_updated": datetime.now(fuso_brasilia).strftime('%H:%M:%S')}
 
 HTML_PAGE = """
 <!DOCTYPE html>
@@ -77,7 +81,7 @@ def update_status():
     global status
     new_status = request.json.get("status")
     status["status"] = new_status
-    status["last_updated"] = datetime.now().strftime('%H:%M:%S')
+    status["last_updated"] = datetime.now(fuso_brasilia).strftime('%H:%M:%S')
     return jsonify(status)
 
 @app.route('/get_status', methods=['GET'])
