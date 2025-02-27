@@ -1,10 +1,18 @@
 from flask import Flask, request, jsonify, render_template_string
 from datetime import datetime
+import pytz
+import os
 
 app = Flask(__name__)
 
-# Armazena o status globalmente
-status = {"status": "Disponível", "last_updated": datetime.now().strftime('%H:%M:%S')}
+# Define o fuso horário correto para Brasília
+fuso_brasilia = pytz.timezone('America/Sao_Paulo')
+
+# Armazena o status globalmente com o horário correto
+status = {
+    "status": "Disponível",
+    "last_updated": datetime.now(fuso_brasilia).strftime('%H:%M:%S')
+}
 
 HTML_PAGE = """
 <!DOCTYPE html>
@@ -73,7 +81,7 @@ def update_status():
     global status
     new_status = request.json.get("status")
     status["status"] = new_status
-    status["last_updated"] = datetime.now().strftime('%H:%M:%S')
+    status["last_updated"] = datetime.now(fuso_brasilia).strftime('%H:%M:%S')
     return jsonify(status)
 
 @app.route('/get_status', methods=['GET'])
@@ -81,9 +89,5 @@ def get_status():
     return jsonify(status)
 
 if __name__ == '__main__':
-    import os
-
-if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))  # Pega a porta do ambiente ou usa 5000 como padrão
     app.run(debug=True, host='0.0.0.0', port=port)
-
