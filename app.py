@@ -1,14 +1,39 @@
 from flask import Flask, request, jsonify, render_template_string
 from datetime import datetime
-import pytz  # Certifique-se de que 'pytz' está instalado
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+import os
 
 app = Flask(__name__)
 
-# Definição do fuso horário correto
-fuso_brasilia = pytz.timezone("America/Sao_Paulo")
+# Configurações do e-mail
+EMAIL_SENDER = "joaoaugusto.lhp1969@gmail.com"  # Substituir pelo seu e-mail
+EMAIL_PASSWORD = "991878424Lhp!"  # Substituir pela senha do e-mail (usar senha de app no Gmail)
+EMAIL_RECEIVER = "hospitalidade@hospitaldebase.com.br"  # E-mail que receberá a notificação
+
+def send_email(new_status):
+    subject = "Atualização de Status"
+    body = f"O status foi alterado para: {new_status}\nÚltima atualização: {datetime.now().strftime('%H:%M:%S')}"
+    
+    msg = MIMEMultipart()
+    msg['From'] = EMAIL_SENDER
+    msg['To'] = EMAIL_RECEIVER
+    msg['Subject'] = subject
+    msg.attach(MIMEText(body, 'plain'))
+    
+    try:
+        server = smtplib.SMTP('smtp.gmail.com', 587)
+        server.starttls()
+        server.login(EMAIL_SENDER, EMAIL_PASSWORD)
+        server.sendmail(EMAIL_SENDER, EMAIL_RECEIVER, msg.as_string())
+        server.quit()
+        print("E-mail enviado com sucesso!")
+    except Exception as e:
+        print(f"Erro ao enviar e-mail: {e}")
 
 # Armazena o status globalmente
-status = {"status": "Disponível", "last_updated": datetime.now(fuso_brasilia).strftime('%H:%M:%S')}
+status = {"status": "Disponível", "last_updated": datetime.now().strftime('%H:%M:%S')}
 
 HTML_PAGE = """
 <!DOCTYPE html>
@@ -55,7 +80,7 @@ HTML_PAGE = """
             } else if (status === 'Em Reunião') {
                 document.body.style.backgroundColor = '#f5baba'; // Vermelho mais forte
             } else if (status === 'Externo') {
-                document.body.style.backgroundColor = '#fce5b8'; // Amarelo claro
+                document.body.style.backgroundColor = '#e5c100'; // Amarelo mais escuro
             }
         }
         
@@ -81,7 +106,8 @@ def update_status():
     global status
     new_status = request.json.get("status")
     status["status"] = new_status
-    status["last_updated"] = datetime.now(fuso_brasilia).strftime('%H:%M:%S')
+    status["last_updated"] = datetime.now().strftime('%H:%M:%S')
+    send_email(new_status)  # Envia e-mail quando o status muda
     return jsonify(status)
 
 @app.route('/get_status', methods=['GET'])
@@ -89,7 +115,5 @@ def get_status():
     return jsonify(status)
 
 if __name__ == '__main__':
-    import os
-
     port = int(os.environ.get("PORT", 5000))  # Pega a porta do ambiente ou usa 5000 como padrão
     app.run(debug=True, host='0.0.0.0', port=port)
