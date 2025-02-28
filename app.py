@@ -5,6 +5,9 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import os
+import google.auth
+from googleapiclient.discovery import build
+from google.oauth2 import service_account
 
 app = Flask(__name__)
 
@@ -12,6 +15,33 @@ app = Flask(__name__)
 EMAIL_SENDER = "joaoaugusto.lhp1969@gmail.com"  # Substituir pelo seu e-mail
 EMAIL_PASSWORD = "dhbi cwnb tueh wmxw"  # Substituir pela senha do e-mail (usar senha de app no Gmail)
 EMAIL_RECEIVER = "hospitalidade@hospitaldebase.com.br"  # E-mail que receberá a notificação
+
+# Configuração do Google Calendar
+SCOPES = ['https://www.googleapis.com/auth/calendar.readonly']
+SERVICE_ACCOUNT_FILE = 'credentials.json'  # Caminho do arquivo JSON da conta de serviço
+CALENDAR_ID = 'seu_calendar_id@group.calendar.google.com'  # Substituir pelo ID da agenda
+
+# Carregar credenciais
+credentials = service_account.Credentials.from_service_account_file(
+    SERVICE_ACCOUNT_FILE, scopes=SCOPES)
+service = build('calendar', 'v3', credentials=credentials)
+
+def get_calendar_events():
+    brt = pytz.timezone('America/Sao_Paulo')
+    now = datetime.now(brt).isoformat()  # Tempo atual em formato ISO
+    events_result = service.events().list(
+        calendarId=CALENDAR_ID, timeMin=now,
+        maxResults=5, singleEvents=True,
+        orderBy='startTime').execute()
+    events = events_result.get('items', [])
+
+    event_list = []
+    for event in events:
+        start = event['start'].get('dateTime', event['start'].get('date'))
+        local_time = datetime.fromisoformat(start).astimezone(brt).strftime('%d/%m %H:%M')
+        event_list.append(f"{local_time}: {event['summary']}")
+    
+    return event_list
 
 def send_email(new_status):
     subject = "Atualização de Status"
@@ -53,6 +83,8 @@ HTML_PAGE = """
         .disponivel { background-color: green; color: white; }
         .reuniao { background-color: red; color: white; }
         .externo { background-color: orange; color: white; }
+        #eventos-container { display: none; margin-top: 20px; background: white; padding: 10px; border-radius: 8px; box-shadow: 0px 0px 10px rgba(0,0,0,0.1); }
+        #toggle-agenda { margin-top: 20px; background-color: blue; color: white; }
     </style>
     <script>
         function updateStatus(newStatus) {
@@ -77,7 +109,7 @@ HTML_PAGE = """
                     updateBackgroundColor(data.status);
                 });
         }
-        
+
         function updateBackgroundColor(status) {
             if (status === 'Disponível') {
                 document.body.style.backgroundColor = '#d4f8d4'; // Verde claro
@@ -88,6 +120,26 @@ HTML_PAGE = """
             }
         }
         
+        function toggleAgenda() {
+            let container = document.getElementById('eventos-container');
+            if (container.style.display === 'none') {
+                fetch('/get_events')
+                    .then(response => response.json())
+                    .then(data => {
+                        let eventosLista = document.getElementById('eventos-lista');
+                        eventosLista.innerHTML = "";
+                        data.events.forEach(event => {
+                            let item = document.createElement('p');
+                            item.textContent = event;
+                            eventosLista.appendChild(item);
+                        });
+                    });
+                container.style.display = 'block';
+            } else {
+                container.style.display = 'none';
+            }
+        }
+
         setInterval(fetchStatus, 3000); // Atualiza o status a cada 3 segundos
     </script>
 </head>
@@ -97,6 +149,12 @@ HTML_PAGE = """
     <button class='disponivel' onclick="updateStatus('Disponível')">Disponível 🟢</button>
     <button class='reuniao' onclick="updateStatus('Em Reunião')">Em Reunião 🔴</button>
     <button class='externo' onclick="updateStatus('Externo')">Externo 🟡</button>
+    <br>
+    <button id="toggle-agenda" onclick="toggleAgenda()">Ver Agenda 📅</button>
+    <div id="eventos-container">
+        <h3>Próximas Reuniões:</h3>
+        <div id="eventos-lista"></div>
+    </div>
 </body>
 </html>
 """
@@ -111,13 +169,13 @@ def update_status():
     new_status = request.json.get("status")
     status["status"] = new_status
     status["last_updated"] = datetime.now(brt).strftime('%H:%M:%S')
-    send_email(new_status)  # Envia e-mail quando o status muda
+    send_email(new_status)
     return jsonify(status)
 
-@app.route('/get_status', methods=['GET'])
-def get_status():
-    return jsonify(status)
+@app.route('/get_events', methods=['GET'])
+def get_events():
+    return jsonify({'events': get_calendar_events()})
 
 if __name__ == '__main__':
-    port = int(os.environ.get("PORT", 5000))  # Pega a porta do ambiente ou usa 5000 como padrão
+    port = int(os.environ.get("PORT", 5000))
     app.run(debug=True, host='0.0.0.0', port=port)
