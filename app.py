@@ -1,5 +1,6 @@
 from flask import Flask, request, jsonify, render_template_string
 from datetime import datetime
+import pytz
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -14,7 +15,9 @@ EMAIL_RECEIVER = "hospitalidade@hospitaldebase.com.br"  # E-mail que receberá a
 
 def send_email(new_status):
     subject = "Atualização de Status"
-    body = f"O status foi alterado para: {new_status}\nÚltima atualização: {datetime.now().strftime('%H:%M:%S')}"
+    brt = pytz.timezone('America/Sao_Paulo')
+    now = datetime.now(brt).strftime('%H:%M:%S')
+    body = f"O status foi alterado para: {new_status}\nÚltima atualização: {now}"
     
     msg = MIMEMultipart()
     msg['From'] = EMAIL_SENDER
@@ -33,7 +36,8 @@ def send_email(new_status):
         print(f"Erro ao enviar e-mail: {e}")
 
 # Armazena o status globalmente
-status = {"status": "Disponível", "last_updated": datetime.now().strftime('%H:%M:%S')}
+brt = pytz.timezone('America/Sao_Paulo')
+status = {"status": "Disponível", "last_updated": datetime.now(brt).strftime('%H:%M:%S')}
 
 HTML_PAGE = """
 <!DOCTYPE html>
@@ -106,7 +110,7 @@ def update_status():
     global status
     new_status = request.json.get("status")
     status["status"] = new_status
-    status["last_updated"] = datetime.now().strftime('%H:%M:%S')
+    status["last_updated"] = datetime.now(brt).strftime('%H:%M:%S')
     send_email(new_status)  # Envia e-mail quando o status muda
     return jsonify(status)
 
