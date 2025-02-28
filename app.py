@@ -79,8 +79,6 @@ HTML_PAGE = """
         .disponivel { background-color: green; color: white; }
         .reuniao { background-color: red; color: white; }
         .externo { background-color: orange; color: white; }
-        #eventos-container { display: none; margin-top: 20px; background: white; padding: 10px; border-radius: 8px; box-shadow: 0px 0px 10px rgba(0,0,0,0.1); }
-        #toggle-agenda { margin-top: 20px; background-color: blue; color: white; }
     </style>
     <script>
         function updateStatus(newStatus) {
@@ -105,7 +103,7 @@ HTML_PAGE = """
                     updateBackgroundColor(data.status);
                 });
         }
-
+        
         function updateBackgroundColor(status) {
             if (status === 'Disponível') {
                 document.body.style.backgroundColor = '#d4f8d4';
