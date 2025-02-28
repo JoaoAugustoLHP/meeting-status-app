@@ -9,7 +9,7 @@ app = Flask(__name__)
 
 # Configurações do e-mail
 EMAIL_SENDER = "joaoaugusto.lhp1969@gmail.com"  # Substituir pelo seu e-mail
-EMAIL_PASSWORD = "991878424Lhp!"  # Substituir pela senha do e-mail (usar senha de app no Gmail)
+EMAIL_PASSWORD = "dhbi cwnb tueh wmxw"  # Substituir pela senha do e-mail (usar senha de app no Gmail)
 EMAIL_RECEIVER = "hospitalidade@hospitaldebase.com.br"  # E-mail que receberá a notificação
 
 def send_email(new_status):
