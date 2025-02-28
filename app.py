@@ -79,6 +79,8 @@ HTML_PAGE = """
         .disponivel { background-color: green; color: white; }
         .reuniao { background-color: red; color: white; }
         .externo { background-color: orange; color: white; }
+        #eventos-container { display: none; margin-top: 20px; background: white; padding: 10px; border-radius: 8px; box-shadow: 0px 0px 10px rgba(0,0,0,0.1); }
+        #toggle-agenda { margin-top: 20px; background-color: blue; color: white; }
     </style>
     <script>
         function updateStatus(newStatus) {
@@ -104,13 +106,27 @@ HTML_PAGE = """
                 });
         }
         
-        function updateBackgroundColor(status) {
-            if (status === 'Disponível') {
-                document.body.style.backgroundColor = '#d4f8d4';
-            } else if (status === 'Em Reunião') {
-                document.body.style.backgroundColor = '#f5baba';
-            } else if (status === 'Externo') {
-                document.body.style.backgroundColor = '#e5c100';
+        function fetchEvents() {
+            fetch('/get_events')
+                .then(response => response.json())
+                .then(data => {
+                    let eventosLista = document.getElementById('eventos-lista');
+                    eventosLista.innerHTML = "";
+                    data.events.forEach(event => {
+                        let item = document.createElement('p');
+                        item.textContent = event;
+                        eventosLista.appendChild(item);
+                    });
+                });
+        }
+        
+        function toggleAgenda() {
+            let container = document.getElementById('eventos-container');
+            if (container.style.display === 'none') {
+                fetchEvents();
+                container.style.display = 'block';
+            } else {
+                container.style.display = 'none';
             }
         }
         
@@ -124,9 +140,19 @@ HTML_PAGE = """
     <button class='disponivel' onclick="updateStatus('Disponível')">Disponível 🟢</button>
     <button class='reuniao' onclick="updateStatus('Em Reunião')">Em Reunião 🔴</button>
     <button class='externo' onclick="updateStatus('Externo')">Externo 🟡</button>
+    <br>
+    <button id="toggle-agenda" onclick="toggleAgenda()">Ver Agenda 📅</button>
+    <div id="eventos-container">
+        <h3>Próximas Reuniões:</h3>
+        <div id="eventos-lista"></div>
+    </div>
 </body>
 </html>
 """
+
+@app.route('/get_events', methods=['GET'])
+def get_events():
+    return jsonify({'events': get_calendar_events()})
 
 @app.route('/')
 def home():
