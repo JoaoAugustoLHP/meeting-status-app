@@ -16,10 +16,14 @@ EMAIL_SENDER = "joaoaugusto.lhp1969@gmail.com"  # Substituir pelo seu e-mail
 EMAIL_PASSWORD = "dhbi cwnb tueh wmxw"  # Substituir pela senha do e-mail (usar senha de app no Gmail)
 EMAIL_RECEIVER = "hospitalidade@hospitaldebase.com.br"  # E-mail que receberá a notificação
 
+import json
+
 # Configuração do Google Calendar
 SCOPES = ['https://www.googleapis.com/auth/calendar.readonly']
-SERVICE_ACCOUNT_FILE = 'credentials.json'  # Caminho do arquivo JSON da conta de serviço
-CALENDAR_ID = 'seu_calendar_id@group.calendar.google.com'  # Substituir pelo ID da agenda
+SERVICE_ACCOUNT_INFO = json.loads(os.environ.get("GOOGLE_CREDENTIALS"))  # Carrega as credenciais do ambiente
+credentials = service_account.Credentials.from_service_account_info(SERVICE_ACCOUNT_INFO, scopes=SCOPES)
+CALENDAR_ID = 'cb703793a8843b777f3d4960bc635e3e4ff95a3b36e2fa4d58facd5bbd261c10@group.calendar.google.com'  # Substituir pelo ID da agenda
+
 
 # Carregar credenciais
 credentials = service_account.Credentials.from_service_account_file(
