@@ -5,29 +5,29 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import os
-import google.auth
+import json
 from googleapiclient.discovery import build
 from google.oauth2 import service_account
 
 app = Flask(__name__)
 
 # Configurações do e-mail
-EMAIL_SENDER = "joaoaugusto.lhp1969@gmail.com"  # Substituir pelo seu e-mail
-EMAIL_PASSWORD = "dhbi cwnb tueh wmxw"  # Substituir pela senha do e-mail (usar senha de app no Gmail)
-EMAIL_RECEIVER = "hospitalidade@hospitaldebase.com.br"  # E-mail que receberá a notificação
+EMAIL_SENDER = "joaoaugusto.lhp1969@gmail.com"
+EMAIL_PASSWORD = "dhbi cwnb tueh wmxw"
+EMAIL_RECEIVER = "hospitalidade@hospitaldebase.com.br"
 
 # Configuração do Google Calendar
 SCOPES = ['https://www.googleapis.com/auth/calendar.readonly']
-SERVICE_ACCOUNT_FILE = 'credentials.json'  # Caminho do arquivo JSON da conta de serviço
+SERVICE_ACCOUNT_INFO = json.loads(os.environ.get("GOOGLE_CREDENTIALS", "{}"))
 CALENDAR_ID = 'cb703793a8843b777f3d4960bc635e3e4ff95a3b36e2fa4d58facd5bbd261c10@group.calendar.google.com'
 
 # Carregar credenciais
-credentials = service_account.Credentials.from_service_account_file(
-    SERVICE_ACCOUNT_FILE, scopes=SCOPES)
+credentials = service_account.Credentials.from_service_account_info(
+    SERVICE_ACCOUNT_INFO, scopes=SCOPES)
 service = build('calendar', 'v3', credentials=credentials)
 
 def get_calendar_events():
-    now = datetime.utcnow().isoformat() + 'Z'  # Tempo atual em formato ISO
+    now = datetime.utcnow().isoformat() + 'Z'
     events_result = service.events().list(
         calendarId=CALENDAR_ID, timeMin=now,
         maxResults=5, singleEvents=True,
