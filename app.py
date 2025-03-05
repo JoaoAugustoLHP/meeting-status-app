@@ -18,10 +18,15 @@ EMAIL_RECEIVER = "hospitalidade@hospitaldebase.com.br"
 
 # Configuração do Google Calendar
 SCOPES = ['https://www.googleapis.com/auth/calendar.readonly']
-SERVICE_ACCOUNT_INFO = json.loads(os.environ.get("GOOGLE_CREDENTIALS", "{}"))
 CALENDAR_ID = 'cb703793a8843b777f3d4960bc635e3e4ff95a3b36e2fa4d58facd5bbd261c10@group.calendar.google.com'
 
-# Carregar credenciais
+# Carregar credenciais do ambiente ou do arquivo
+if os.environ.get("GOOGLE_CREDENTIALS"):
+    SERVICE_ACCOUNT_INFO = json.loads(os.environ["GOOGLE_CREDENTIALS"])
+else:
+    with open("credentials.json") as f:
+        SERVICE_ACCOUNT_INFO = json.load(f)
+
 credentials = service_account.Credentials.from_service_account_info(
     SERVICE_ACCOUNT_INFO, scopes=SCOPES)
 service = build('calendar', 'v3', credentials=credentials)
@@ -67,82 +72,6 @@ def send_email(new_status):
 brt = pytz.timezone('America/Sao_Paulo')
 status = {"status": "Disponível", "last_updated": datetime.now(brt).strftime('%H:%M:%S')}
 
-HTML_PAGE = """
-<!DOCTYPE html>
-<html lang='pt'>
-<head>
-    <meta charset='UTF-8'>
-    <meta name='viewport' content='width=device-width, initial-scale=1.0'>
-    <title>Status da Reunião</title>
-    <style>
-        body { font-family: Arial, sans-serif; text-align: center; margin-top: 50px; transition: background-color 0.5s; }
-        h1 { color: #333; }
-        button { font-size: 18px; padding: 10px 20px; margin: 10px; cursor: pointer; border: none; border-radius: 5px; }
-        .disponivel { background-color: green; color: white; }
-        .reuniao { background-color: red; color: white; }
-        .externo { background-color: orange; color: white; }
-        #eventos-container { display: none; margin-top: 20px; background: white; padding: 10px; border-radius: 8px; box-shadow: 0px 0px 10px rgba(0,0,0,0.1); }
-        #toggle-agenda { margin-top: 20px; background-color: blue; color: white; }
-    </style>
-    <script>
-        function updateStatus(newStatus) {
-            fetch('/update_status', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 'status': newStatus })
-            }).then(response => response.json())
-              .then(data => {
-                  document.getElementById('status-text').innerText = 'Status: ' + data.status;
-                  document.getElementById('last-updated').innerText = 'Última atualização: ' + data.last_updated;
-                  updateBackgroundColor(data.status);
-              });
-        }
-        
-        function updateBackgroundColor(status) {
-            if (status === 'Disponível') {
-                document.body.style.backgroundColor = '#d4f8d4';
-            } else if (status === 'Em Reunião') {
-                document.body.style.backgroundColor = '#f5baba';
-            } else if (status === 'Externo') {
-                document.body.style.backgroundColor = '#e5c100';
-            }
-        }
-        
-        function toggleAgenda() {
-            let container = document.getElementById('eventos-container');
-            if (container.style.display === 'none') {
-                fetch('/get_events')
-                    .then(response => response.json())
-                    .then(data => {
-                        let eventosLista = document.getElementById('eventos-lista');
-                        eventosLista.innerHTML = "";
-                        data.events.forEach(event => {
-                            let item = document.createElement('p');
-                            item.textContent = event;
-                            eventosLista.appendChild(item);
-                        });
-                    });
-                container.style.display = 'block';
-            } else {
-                container.style.display = 'none';
-            }
-        }
-        
-        window.onload = function() { updateBackgroundColor('{{ status['status'] }}'); };
-    </script>
-</head>
-<body>
-    <h1 id='status-text'>Status: {{ status['status'] }}</h1>
-    <p id='last-updated'>Última atualização: {{ status['last_updated'] }}</p>
-    <button class='disponivel' onclick="updateStatus('Disponível')">Disponível 🟢</button>
-    <button class='reuniao' onclick="updateStatus('Em Reunião')">Em Reunião 🔴</button>
-    <button class='externo' onclick="updateStatus('Externo')">Externo 🟡</button>
-    <br>
-    <button id="toggle-agenda" onclick="toggleAgenda()">Ver Agenda 📅</button>
-    <div id="eventos-container">
-        <h3>Próximas Reuniões:</h3>
-        <div id="eventos-lista"></div>
-    </div>
-</body>
-</html>
-"""
+@app.route('/get_events', methods=['GET'])
+def get_events():
+    return jsonify({'events': get_calendar_events()})
