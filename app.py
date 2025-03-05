@@ -35,7 +35,7 @@ def get_calendar_events():
     now = datetime.now(brt).isoformat()  # Tempo atual em formato ISO
     events_result = service.events().list(
         calendarId=CALENDAR_ID, timeMin=now,
-        maxResults=10, singleEvents=True,
+        maxResults=5, singleEvents=True,
         orderBy='startTime').execute()
     events = events_result.get('items', [])
 
