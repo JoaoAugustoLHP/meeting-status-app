@@ -13,7 +13,6 @@ from google.oauth2 import service_account
 app = Flask(__name__)
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='gevent')
 
-
 # Configurações do e-mail
 EMAIL_SENDER = "joaoaugusto.lhp1969@gmail.com"
 EMAIL_PASSWORD = "dhbi cwnb tueh wmxw"
@@ -117,7 +116,7 @@ def home():
     </div>
 </body>
 </html>""".format(status=status["status"], last_updated=status["last_updated"], events='<br>'.join(event_list))
-
+    
     return render_template_string(html_page)
 
 @app.route('/update_status', methods=['POST'])
