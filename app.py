@@ -11,7 +11,7 @@ from googleapiclient.discovery import build
 from google.oauth2 import service_account
 
 app = Flask(__name__)
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet')
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode='gevent')
 
 # Configurações do e-mail
 EMAIL_SENDER = "joaoaugusto.lhp1969@gmail.com"
@@ -131,4 +131,4 @@ def update_status():
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
-    socketio.run(app, host='0.0.0.0', port=port, debug=True)
+    socketio.run(app, debug=True, host='0.0.0.0', port=port)
