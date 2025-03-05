@@ -37,8 +37,8 @@ def get_calendar_events():
     event_list = []
     for event in events:
         start = event['start'].get('dateTime', event['start'].get('date'))
-        local_time = datetime.fromisoformat(start).astimezone(brt).strftime('%d/%m %H:%M')
-        event_list.append(f"{local_time}: {event['summary']}")
+        local_time = datetime.fromisoformat(start).astimezone(brt).strftime('%d/%m/%Y %H:%M')
+        event_list.append(f"{local_time} - {event['summary']}")
     return event_list
 
 def send_email(new_status):
@@ -98,6 +98,16 @@ HTML_PAGE = """
               });
         }
         
+        function updateBackgroundColor(status) {
+            if (status === 'Disponível') {
+                document.body.style.backgroundColor = '#d4f8d4';
+            } else if (status === 'Em Reunião') {
+                document.body.style.backgroundColor = '#f5baba';
+            } else if (status === 'Externo') {
+                document.body.style.backgroundColor = '#e5c100';
+            }
+        }
+        
         function toggleAgenda() {
             let container = document.getElementById('eventos-container');
             if (container.style.display === 'none') {
@@ -117,9 +127,11 @@ HTML_PAGE = """
                 container.style.display = 'none';
             }
         }
+        
+        window.onload = function() { updateBackgroundColor('{{ status['status'] }}'); };
     </script>
 </head>
-<body onload="updateBackgroundColor('{{ status['status'] }}')">
+<body>
     <h1 id='status-text'>Status: {{ status['status'] }}</h1>
     <p id='last-updated'>Última atualização: {{ status['last_updated'] }}</p>
     <button class='disponivel' onclick="updateStatus('Disponível')">Disponível 🟢</button>
@@ -134,11 +146,3 @@ HTML_PAGE = """
 </body>
 </html>
 """
-
-@app.route('/get_events', methods=['GET'])
-def get_events():
-    return jsonify({'events': get_calendar_events()})
-
-if __name__ == '__main__':
-    port = int(os.environ.get("PORT", 5000))
-    app.run(debug=True, host='0.0.0.0', port=port)
