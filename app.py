@@ -27,7 +27,8 @@ credentials = service_account.Credentials.from_service_account_info(
 service = build('calendar', 'v3', credentials=credentials)
 
 def get_calendar_events():
-    now = datetime.utcnow().isoformat() + 'Z'
+    brt = pytz.timezone('America/Sao_Paulo')
+    now = datetime.now(brt).isoformat()
     events_result = service.events().list(
         calendarId=CALENDAR_ID, timeMin=now,
         maxResults=5, singleEvents=True,
@@ -36,7 +37,8 @@ def get_calendar_events():
     event_list = []
     for event in events:
         start = event['start'].get('dateTime', event['start'].get('date'))
-        event_list.append(f"{start}: {event['summary']}")
+        local_time = datetime.fromisoformat(start).astimezone(brt).strftime('%d/%m %H:%M')
+        event_list.append(f"{local_time}: {event['summary']}")
     return event_list
 
 def send_email(new_status):
@@ -106,27 +108,13 @@ HTML_PAGE = """
                 });
         }
         
-        function fetchEvents() {
-            fetch('/get_events')
-                .then(response => response.json())
-                .then(data => {
-                    let eventosLista = document.getElementById('eventos-lista');
-                    eventosLista.innerHTML = "";
-                    data.events.forEach(event => {
-                        let item = document.createElement('p');
-                        item.textContent = event;
-                        eventosLista.appendChild(item);
-                    });
-                });
-        }
-        
-        function toggleAgenda() {
-            let container = document.getElementById('eventos-container');
-            if (container.style.display === 'none') {
-                fetchEvents();
-                container.style.display = 'block';
-            } else {
-                container.style.display = 'none';
+        function updateBackgroundColor(status) {
+            if (status === 'Disponível') {
+                document.body.style.backgroundColor = '#d4f8d4';
+            } else if (status === 'Em Reunião') {
+                document.body.style.backgroundColor = '#f5baba';
+            } else if (status === 'Externo') {
+                document.body.style.backgroundColor = '#e5c100';
             }
         }
         
@@ -134,29 +122,28 @@ HTML_PAGE = """
         setInterval(fetchStatus, 3000);
     </script>
 </head>
-<body>
+<body onload="fetchStatus()">
     <h1 id='status-text'>Status: {{ status['status'] }}</h1>
     <p id='last-updated'>Última atualização: {{ status['last_updated'] }}</p>
     <button class='disponivel' onclick="updateStatus('Disponível')">Disponível 🟢</button>
     <button class='reuniao' onclick="updateStatus('Em Reunião')">Em Reunião 🔴</button>
     <button class='externo' onclick="updateStatus('Externo')">Externo 🟡</button>
-    <br>
-    <button id="toggle-agenda" onclick="toggleAgenda()">Ver Agenda 📅</button>
-    <div id="eventos-container">
-        <h3>Próximas Reuniões:</h3>
-        <div id="eventos-lista"></div>
-    </div>
 </body>
 </html>
 """
 
-@app.route('/get_events', methods=['GET'])
-def get_events():
-    return jsonify({'events': get_calendar_events()})
-
 @app.route('/')
 def home():
     return render_template_string(HTML_PAGE, status=status)
+
+@app.route('/update_status', methods=['POST'])
+def update_status():
+    global status
+    new_status = request.json.get("status")
+    status["status"] = new_status
+    status["last_updated"] = datetime.now(brt).strftime('%H:%M:%S')
+    send_email(new_status)
+    return jsonify(status)
 
 @app.route('/get_status', methods=['GET'])
 def get_status():
