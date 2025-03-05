@@ -102,26 +102,6 @@ def home():
             document.getElementById('last-updated').innerText = 'Última atualização: ' + data.last_updated;
             updateBackgroundColor(data.status);
         });
-        function updateStatus(newStatus) {
-            fetch('/update_status', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 'status': newStatus })
-            });
-        }
-        function updateBackgroundColor(status) {
-            if (status === 'Disponível') {
-                document.body.style.backgroundColor = '#d4f8d4';
-            } else if (status === 'Em Reunião') {
-                document.body.style.backgroundColor = '#f5baba';
-            } else if (status === 'Externo') {
-                document.body.style.backgroundColor = '#e5c100';
-            }
-        }
-        function toggleAgenda() {
-            let container = document.getElementById('eventos-container');
-            container.style.display = (container.style.display === 'none' || container.style.display === '') ? 'block' : 'none';
-        }
     </script>
 </head>
 <body>
@@ -138,8 +118,7 @@ def home():
 </body>
 </html>""".format(status=status["status"], last_updated=status["last_updated"], events='<br>'.join(event_list))
 
-return render_template_string(html_page)
-
+    return render_template_string(html_page)
 
 @app.route('/update_status', methods=['POST'])
 def update_status():
