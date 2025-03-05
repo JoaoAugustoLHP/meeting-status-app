@@ -33,7 +33,7 @@ def update_status():
     global status
     data = request.json
     status = data.get('status', status)
-    socketio.emit('status_update', {'status': status})
+    socketio.emit('status_update', {'status': status}, broadcast=True)
     return jsonify({'message': 'Status atualizado com sucesso!', 'status': status})
 
 @app.route('/get_status', methods=['GET'])
@@ -42,4 +42,4 @@ def get_status():
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
-    socketio.run(app, host='0.0.0.0', port=port, allow_unsafe_werkzeug=True)
+    socketio.run(app, host='0.0.0.0', port=port)
