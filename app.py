@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, render_template_string
 from flask_socketio import SocketIO
 from datetime import datetime
 import pytz
@@ -11,7 +11,7 @@ from googleapiclient.discovery import build
 from google.oauth2 import service_account
 
 app = Flask(__name__)
-socketio = SocketIO(app, cors_allowed_origins="*")
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
 
 # Configurações do e-mail
 EMAIL_SENDER = "joaoaugusto.lhp1969@gmail.com"
@@ -76,7 +76,7 @@ status = {"status": "Disponível", "last_updated": datetime.now(brt).strftime('%
 
 @app.route('/')
 def home():
-    return f"""
+    html_page = """
     <!DOCTYPE html>
     <html lang='pt'>
     <head>
@@ -84,54 +84,54 @@ def home():
         <meta name='viewport' content='width=device-width, initial-scale=1.0'>
         <title>Status da Reunião</title>
         <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
-        <style>
-            body {{ font-family: Arial, sans-serif; text-align: center; margin-top: 50px; background-color: #d4f8d4; transition: background-color 0.5s; }}
-            h1 {{ color: #333; }}
-            button {{ font-size: 18px; padding: 10px 20px; margin: 10px; cursor: pointer; border: none; border-radius: 5px; }}
-            .disponivel {{ background-color: green; color: white; }}
-            .reuniao {{ background-color: red; color: white; }}
-            .externo {{ background-color: orange; color: white; }}
-            #eventos-container {{ margin-top: 20px; background: white; padding: 10px; border-radius: 8px; box-shadow: 0px 0px 10px rgba(0,0,0,0.1); }}
-        </style>
-    </head>
-    <body>
-        <h1 id='status-text'>Status: {status['status']}</h1>
-        <p id='last-updated'>Última atualização: {status['last_updated']}</p>
-        <button class='disponivel' onclick="updateStatus('Disponível')">Disponível 🟢</button>
-        <button class='reuniao' onclick="updateStatus('Em Reunião')">Em Reunião 🔴</button>
-        <button class='externo' onclick="updateStatus('Externo')">Externo 🟡</button>
-        <br>
-        <div id="eventos-container">
-            <h3>Próximas Reuniões:</h3>
-            {"<br>".join(get_calendar_events())}
-        </div>
         <script>
-            var socket = io("https://meeting-status-app.onrender.com");
-            socket.on('status_update', function(data) {{
+            var socket = io();
+            socket.on('status_update', function(data) {
                 document.getElementById('status-text').innerText = 'Status: ' + data.status;
                 document.getElementById('last-updated').innerText = 'Última atualização: ' + data.last_updated;
                 updateBackgroundColor(data.status);
-            }});
-            function updateStatus(newStatus) {{
-                fetch('/update_status', {{
+            });
+            function updateStatus(newStatus) {
+                fetch('/update_status', {
                     method: 'POST',
-                    headers: {{ 'Content-Type': 'application/json' }},
-                    body: JSON.stringify({{ 'status': newStatus }})
-                }});
-            }}
-            function updateBackgroundColor(status) {{
-                if (status === 'Disponível') {{
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 'status': newStatus })
+                });
+            }
+            function updateBackgroundColor(status) {
+                if (status === 'Disponível') {
                     document.body.style.backgroundColor = '#d4f8d4';
-                }} else if (status === 'Em Reunião') {{
+                } else if (status === 'Em Reunião') {
                     document.body.style.backgroundColor = '#f5baba';
-                }} else if (status === 'Externo') {{
+                } else if (status === 'Externo') {
                     document.body.style.backgroundColor = '#e5c100';
-                }}
-            }}
+                }
+            }
+            function toggleAgenda() {
+                let container = document.getElementById('eventos-container');
+                container.style.display = (container.style.display === 'none' || container.style.display === '') ? 'block' : 'none';
+            }
         </script>
+    </head>
+    <body>
+        <h1 id='status-text'>Status: {status}</h1>
+        <p id='last-updated'>Última atualização: {last_updated}</p>
+        <button onclick="updateStatus('Disponível')">Disponível</button>
+        <button onclick="updateStatus('Em Reunião')">Em Reunião</button>
+        <button onclick="updateStatus('Externo')">Externo</button>
+        <button onclick="toggleAgenda()">Ver Agenda 📅</button>
+        <div id='eventos-container' style='display: none;'>
+            <h3>Próximas Reuniões:</h3>
+            <div>{events}</div>
+        </div>
     </body>
     </html>
-    """
+    """.format(status=status["status"], last_updated=status["last_updated"], events='<br>'.join(get_calendar_events()))
+    return render_template_string(html_page)
+
+@app.route('/get_events', methods=['GET'])
+def get_events():
+    return jsonify({'events': get_calendar_events()})
 
 @app.route('/update_status', methods=['POST'])
 def update_status():
@@ -140,16 +140,12 @@ def update_status():
     status["status"] = new_status
     status["last_updated"] = datetime.now(brt).strftime('%H:%M:%S')
     send_email(new_status)
-    socketio.emit('status_update', status)
+    socketio.emit('status_update', status, broadcast=True)
     return jsonify(status)
 
 @app.route('/get_status', methods=['GET'])
 def get_status():
     return jsonify(status)
-
-@app.route('/get_events', methods=['GET'])
-def get_events():
-    return jsonify({'events': get_calendar_events()})
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
