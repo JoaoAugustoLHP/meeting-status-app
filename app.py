@@ -36,16 +36,26 @@ service = build('calendar', 'v3', credentials=credentials)
 def get_calendar_events():
     brt = pytz.timezone('America/Sao_Paulo')
     now = datetime.now(brt).isoformat()
-    events_result = service.events().list(
-        calendarId=CALENDAR_ID, timeMin=now,
-        maxResults=10, singleEvents=True,
-        orderBy='startTime').execute()
-    events = events_result.get('items', [])
+    try:
+        events_result = service.events().list(
+            calendarId=CALENDAR_ID, timeMin=now,
+            maxResults=10, singleEvents=True,
+            orderBy='startTime').execute()
+        events = events_result.get('items', [])
+    except Exception as e:
+        print(f"Erro ao buscar eventos: {e}")
+        events = []
+    
     event_list = []
     for event in events:
         start = event['start'].get('dateTime', event['start'].get('date'))
-        local_time = datetime.fromisoformat(start).astimezone(brt).strftime('%d/%m %H:%M')
-        event_list.append(f"<strong>{local_time}</strong> - {event['summary']}")
+        if start:
+            try:
+                local_time = datetime.fromisoformat(start).astimezone(brt).strftime('%d/%m %H:%M')
+                event_list.append(f"<strong>{local_time}</strong> - {event['summary']}")
+            except Exception as e:
+                print(f"Erro ao converter horário: {e}")
+                continue
     return event_list
 
 def send_email(new_status):
@@ -70,12 +80,13 @@ def send_email(new_status):
     except Exception as e:
         print(f"Erro ao enviar e-mail: {e}")
 
-# Armazena o status globalmente
 brt = pytz.timezone('America/Sao_Paulo')
 status = {"status": "Disponível", "last_updated": datetime.now(brt).strftime('%H:%M:%S')}
 
 @app.route('/')
 def home():
+    event_list = get_calendar_events()
+    print(event_list)  # Debugging
     html_page = """
     <!DOCTYPE html>
     <html lang='pt'>
@@ -119,19 +130,15 @@ def home():
         <button onclick="updateStatus('Disponível')">Disponível</button>
         <button onclick="updateStatus('Em Reunião')">Em Reunião</button>
         <button onclick="updateStatus('Externo')">Externo</button>
-        <button onclick="toggleAgenda()">Ver Agenda 📅</button>
+        <button id="agenda-btn" onclick="toggleAgenda()">Ver Agenda 📅</button>
         <div id='eventos-container' style='display: none;'>
             <h3>Próximas Reuniões:</h3>
             <div>{events}</div>
         </div>
     </body>
     </html>
-    """.format(status=status["status"], last_updated=status["last_updated"], events='<br>'.join(get_calendar_events()))
+    """.format(status=status["status"], last_updated=status["last_updated"], events='<br>'.join(event_list))
     return render_template_string(html_page)
-
-@app.route('/get_events', methods=['GET'])
-def get_events():
-    return jsonify({'events': get_calendar_events()})
 
 @app.route('/update_status', methods=['POST'])
 def update_status():
@@ -140,11 +147,7 @@ def update_status():
     status["status"] = new_status
     status["last_updated"] = datetime.now(brt).strftime('%H:%M:%S')
     send_email(new_status)
-    socketio.emit('status_update', status, broadcast=True)
-    return jsonify(status)
-
-@app.route('/get_status', methods=['GET'])
-def get_status():
+    socketio.emit('status_update', status, namespace='/')
     return jsonify(status)
 
 if __name__ == '__main__':
