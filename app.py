@@ -1,3 +1,7 @@
+import eventlet
+eventlet.monkey_patch()
+
+
 from flask import Flask, render_template_string, jsonify, request
 from flask_socketio import SocketIO
 import os
