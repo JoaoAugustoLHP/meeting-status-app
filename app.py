@@ -1,14 +1,14 @@
 import eventlet
+eventlet.monkey_patch()
+
+from flask import Flask, render_template_string, jsonify, request
+from flask_socketio import SocketIO
 import os
 import json
 from datetime import datetime
 import pytz
 from googleapiclient.discovery import build
 from google.oauth2 import service_account
-from flask import Flask, render_template_string, jsonify, request
-from flask_socketio import SocketIO
-
-eventlet.monkey_patch()
 
 app = Flask(__name__)
 socketio = SocketIO(app, cors_allowed_origins="*")
@@ -29,12 +29,14 @@ try:
 except Exception as e:
     raise ValueError(f"Erro ao carregar credenciais do Google: {e}")
 
+# ID da Agenda do Google (substitua pelo seu)
 CALENDAR_ID = 'cb703793a8843b777f3d4960bc635e3e4ff95a3b36e2fa4d58facd5bbd261c10@group.calendar.google.com'
 
 def get_calendar_events():
+    """Busca os próximos eventos da agenda do Google."""
     try:
         brt = pytz.timezone('America/Sao_Paulo')
-        now = datetime.now(brt).isoformat()
+        now = datetime.now(brt).isoformat()  
         events_result = service.events().list(
             calendarId=CALENDAR_ID, timeMin=now,
             maxResults=5, singleEvents=True,
@@ -54,6 +56,7 @@ def get_calendar_events():
         print(f"Erro ao buscar eventos do Google Calendar: {e}")
         return ["Erro ao carregar eventos"]
 
+# Página HTML com WebSocket e integração com Google Agenda
 HTML_PAGE = """
 <!DOCTYPE html>
 <html lang='pt'>
@@ -63,13 +66,13 @@ HTML_PAGE = """
     <title>Status da Reunião</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
     <style>
-        body { font-family: Arial, sans-serif; text-align: center; transition: background-color 0.5s; }
+        body { font-family: Arial, sans-serif; text-align: center; margin-top: 50px; transition: background-color 0.5s; }
         h1 { color: #333; }
         button { font-size: 18px; padding: 10px 20px; margin: 10px; cursor: pointer; border: none; border-radius: 5px; }
         .disponivel { background-color: green; color: white; }
         .reuniao { background-color: red; color: white; }
         .externo { background-color: orange; color: white; }
-        #eventos-container { display: none; margin-top: 20px; background: white; padding: 10px; border-radius: 8px; box-shadow: 0px 0px 10px rgba(0,0,0,0.1); }
+        #eventos-container { margin-top: 20px; background: white; padding: 10px; border-radius: 8px; box-shadow: 0px 0px 10px rgba(0,0,0,0.1); }
         #toggle-agenda { margin-top: 20px; background-color: blue; color: white; }
         #eventos-lista p { font-size: 16px; margin: 5px 0; line-height: 1.5; }
     </style>
@@ -87,7 +90,12 @@ HTML_PAGE = """
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ 'status': newStatus })
-            });
+            }).then(response => response.json())
+              .then(data => {
+                  document.getElementById('status-text').innerText = 'Status: ' + data.status;
+                  document.getElementById('last-updated').innerText = 'Última atualização: ' + data.last_updated;
+                  updateBackgroundColor(data.status);
+              });
         }
 
         function updateBackgroundColor(status) {
@@ -100,7 +108,7 @@ HTML_PAGE = """
             }
         }
 
-        function fetchEvents() {
+        function atualizarAgenda() {
             fetch('/get_events')
                 .then(response => response.json())
                 .then(data => {
@@ -114,18 +122,20 @@ HTML_PAGE = """
                 });
         }
 
-        setInterval(fetchEvents, 30000);
+        // Atualiza a agenda automaticamente a cada 30 segundos
+        setInterval(atualizarAgenda, 30000);
+
     </script>
 </head>
-<body>
+<body onload="updateBackgroundColor('{{ status['status'] }}'); atualizarAgenda();">
     <h1 id='status-text'>Status: {{ status['status'] }}</h1>
     <p id='last-updated'>Última atualização: {{ status['last_updated'] }}</p>
     <button class='disponivel' onclick="updateStatus('Disponível')">Disponível 🟢</button>
     <button class='reuniao' onclick="updateStatus('Em Reunião')">Em Reunião 🔴</button>
     <button class='externo' onclick="updateStatus('Externo')">Externo 🟡</button>
     <br>
+    <h3>📅 Próximas Reuniões:</h3>
     <div id="eventos-container">
-        <h3>📅 Próximas Reuniões:</h3>
         <div id="eventos-lista"></div>
     </div>
 </body>
