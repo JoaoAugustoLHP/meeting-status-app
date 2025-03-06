@@ -1,14 +1,14 @@
 import eventlet
-eventlet.monkey_patch()
-
-from flask import Flask, render_template_string, jsonify, request
-from flask_socketio import SocketIO
 import os
 import json
 from datetime import datetime
 import pytz
 from googleapiclient.discovery import build
 from google.oauth2 import service_account
+from flask import Flask, render_template_string, jsonify, request
+from flask_socketio import SocketIO
+
+eventlet.monkey_patch()
 
 app = Flask(__name__)
 socketio = SocketIO(app, cors_allowed_origins="*")
@@ -99,6 +99,22 @@ HTML_PAGE = """
                 document.body.style.backgroundColor = '#e5c100';
             }
         }
+
+        function fetchEvents() {
+            fetch('/get_events')
+                .then(response => response.json())
+                .then(data => {
+                    let eventosLista = document.getElementById('eventos-lista');
+                    eventosLista.innerHTML = "";
+                    data.events.forEach(event => {
+                        let item = document.createElement('p');
+                        item.innerHTML = event;
+                        eventosLista.appendChild(item);
+                    });
+                });
+        }
+
+        setInterval(fetchEvents, 30000);
     </script>
 </head>
 <body>
@@ -107,6 +123,11 @@ HTML_PAGE = """
     <button class='disponivel' onclick="updateStatus('Disponível')">Disponível 🟢</button>
     <button class='reuniao' onclick="updateStatus('Em Reunião')">Em Reunião 🔴</button>
     <button class='externo' onclick="updateStatus('Externo')">Externo 🟡</button>
+    <br>
+    <div id="eventos-container">
+        <h3>📅 Próximas Reuniões:</h3>
+        <div id="eventos-lista"></div>
+    </div>
 </body>
 </html>
 """
@@ -114,6 +135,10 @@ HTML_PAGE = """
 @app.route('/')
 def home():
     return render_template_string(HTML_PAGE, status=status)
+
+@app.route('/get_events', methods=['GET'])
+def get_events():
+    return jsonify({'events': get_calendar_events()})
 
 @app.route('/update_status', methods=['POST'])
 def update_status():
