@@ -1,7 +1,6 @@
 import eventlet
 eventlet.monkey_patch()
 
-
 from flask import Flask, render_template_string, jsonify, request
 from flask_socketio import SocketIO
 import os
@@ -46,8 +45,12 @@ def get_calendar_events():
     event_list = []
     for event in events:
         start = event['start'].get('dateTime', event['start'].get('date'))
-        local_time = datetime.fromisoformat(start).astimezone(brt).strftime('%d/%m %H:%M')
-        event_list.append(f"{local_time}: {event['summary']}")
+        local_time = datetime.fromisoformat(start).astimezone(brt)
+        formatted_date = local_time.strftime('%d/%m')
+        formatted_time = local_time.strftime('%H:%M')
+        
+        # Agora separa a data/hora do título do evento e aplica formatação
+        event_list.append(f"<b>{formatted_date} - {formatted_time}</b> ➜ {event['summary']}")
 
     return event_list
 
@@ -69,6 +72,7 @@ HTML_PAGE = """
         .externo { background-color: orange; color: white; }
         #eventos-container { display: none; margin-top: 20px; background: white; padding: 10px; border-radius: 8px; box-shadow: 0px 0px 10px rgba(0,0,0,0.1); }
         #toggle-agenda { margin-top: 20px; background-color: blue; color: white; }
+        #eventos-lista p { font-size: 16px; margin: 5px 0; line-height: 1.5; }
     </style>
     <script>
         var socket = io.connect('http://' + document.domain + ':' + location.port);
@@ -112,7 +116,7 @@ HTML_PAGE = """
                         eventosLista.innerHTML = "";
                         data.events.forEach(event => {
                             let item = document.createElement('p');
-                            item.textContent = event;
+                            item.innerHTML = event;
                             eventosLista.appendChild(item);
                         });
                     });
@@ -142,7 +146,7 @@ HTML_PAGE = """
     <br>
     <button id="toggle-agenda" onclick="toggleAgenda()">Ver Agenda 📅</button>
     <div id="eventos-container">
-        <h3>Próximas Reuniões:</h3>
+        <h3>📅 Próximas Reuniões:</h3>
         <div id="eventos-lista"></div>
     </div>
 </body>
@@ -153,22 +157,9 @@ HTML_PAGE = """
 def home():
     return render_template_string(HTML_PAGE, status=status)
 
-@app.route('/update_status', methods=['POST'])
-def update_status():
-    global status
-    data = request.json
-    status["status"] = data.get("status", status["status"])
-    status["last_updated"] = datetime.now(pytz.timezone('America/Sao_Paulo')).strftime('%H:%M:%S')
-    socketio.emit('status_update', status)
-    return jsonify(status)
-
 @app.route('/get_events', methods=['GET'])
 def get_events():
     return jsonify({'events': get_calendar_events()})
-
-@app.route('/get_status', methods=['GET'])
-def get_status():
-    return jsonify(status)
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
