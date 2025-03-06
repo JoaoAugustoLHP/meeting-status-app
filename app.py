@@ -39,7 +39,7 @@ def get_calendar_events():
         now = datetime.now(brt).isoformat()  
         events_result = service.events().list(
             calendarId=CALENDAR_ID, timeMin=now,
-            maxResults=5, singleEvents=True,
+            maxResults=8, singleEvents=True,
             orderBy='startTime').execute()
         events = events_result.get('items', [])
 
