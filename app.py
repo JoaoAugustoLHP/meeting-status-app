@@ -1,7 +1,7 @@
 import eventlet
 eventlet.monkey_patch()
 
-from flask import Flask, render_template_string, jsonify, request
+from flask import Flask, render_template_string, jsonify, request, send_from_directory
 from flask_socketio import SocketIO
 import os
 import json
@@ -34,25 +34,30 @@ CALENDAR_ID = 'cb703793a8843b777f3d4960bc635e3e4ff95a3b36e2fa4d58facd5bbd261c10@
 
 def get_calendar_events():
     """Busca os próximos eventos da agenda do Google."""
-    brt = pytz.timezone('America/Sao_Paulo')
-    now = datetime.now(brt).isoformat()  # Tempo atual em formato ISO
-    events_result = service.events().list(
-        calendarId=CALENDAR_ID, timeMin=now,
-        maxResults=5, singleEvents=True,
-        orderBy='startTime').execute()
-    events = events_result.get('items', [])
+    try:
+        brt = pytz.timezone('America/Sao_Paulo')
+        now = datetime.now(brt).isoformat()  
+        events_result = service.events().list(
+            calendarId=CALENDAR_ID, timeMin=now,
+            maxResults=5, singleEvents=True,
+            orderBy='startTime').execute()
+        events = events_result.get('items', [])
 
-    event_list = []
-    for event in events:
-        start = event['start'].get('dateTime', event['start'].get('date'))
-        local_time = datetime.fromisoformat(start).astimezone(brt)
-        formatted_date = local_time.strftime('%d/%m')
-        formatted_time = local_time.strftime('%H:%M')
-        
-        # Agora separa a data/hora do título do evento e aplica formatação
-        event_list.append(f"<b>{formatted_date} - {formatted_time}</b> ➜ {event['summary']}")
+        event_list = []
+        for event in events:
+            start = event['start'].get('dateTime', event['start'].get('date'))
+            local_time = datetime.fromisoformat(start).astimezone(brt)
+            formatted_date = local_time.strftime('%d/%m')
+            formatted_time = local_time.strftime('%H:%M')
 
-    return event_list
+            # Melhorando a formatação para facilitar a leitura
+            event_list.append(f"<b>{formatted_date} - {formatted_time}</b> ➜ {event['summary']}")
+
+        return event_list
+
+    except Exception as e:
+        print(f"Erro ao buscar eventos do Google Calendar: {e}")
+        return ["Erro ao carregar eventos"]
 
 # Página HTML com WebSocket e integração com Google Agenda
 HTML_PAGE = """
@@ -75,7 +80,7 @@ HTML_PAGE = """
         #eventos-lista p { font-size: 16px; margin: 5px 0; line-height: 1.5; }
     </style>
     <script>
-        var socket = io.connect('http://' + document.domain + ':' + location.port);
+        var socket = io.connect('https://' + document.domain + ':' + location.port);
 
         socket.on('status_update', function(data) {
             document.getElementById('status-text').innerText = 'Status: ' + data.status;
@@ -160,6 +165,19 @@ def home():
 @app.route('/get_events', methods=['GET'])
 def get_events():
     return jsonify({'events': get_calendar_events()})
+
+@app.route('/update_status', methods=['POST'])
+def update_status():
+    try:
+        global status
+        data = request.json
+        status["status"] = data.get("status", status["status"])
+        status["last_updated"] = datetime.now(pytz.timezone('America/Sao_Paulo')).strftime('%H:%M:%S')
+        socketio.emit('status_update', status)
+        return jsonify(status)
+    except Exception as e:
+        print(f"Erro ao atualizar status: {e}")
+        return jsonify({"error": "Erro ao atualizar status"}), 500
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
