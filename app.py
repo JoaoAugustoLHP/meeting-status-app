@@ -72,6 +72,39 @@ def get_calendar_events():
             print(f"Erro ao buscar eventos do Google Calendar: {e}")
             return ["Erro ao carregar eventos"]
 
+HTML_PAGE = """
+<!DOCTYPE html>
+<html lang='pt'>
+<head>
+    <meta charset='UTF-8'>
+    <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+    <title>Status da Reunião</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; transition: background-color 0.5s; }
+        h1 { color: #333; }
+        button { font-size: 18px; padding: 10px 20px; margin: 10px; cursor: pointer; border: none; border-radius: 5px; }
+        .disponivel { background-color: green; color: white; }
+        .reuniao { background-color: red; color: white; }
+        .externo { background-color: orange; color: white; }
+        #eventos-container { margin-top: 20px; background: white; padding: 10px; border-radius: 8px; box-shadow: 0px 0px 10px rgba(0,0,0,0.1); }
+    </style>
+</head>
+<body>
+    <h1>Status: {{ status['status'] }}</h1>
+    <p>Última atualização: {{ status['last_updated'] }}</p>
+    <button class='disponivel' onclick="updateStatus('Disponível')">Disponível 🟢</button>
+    <button class='reuniao' onclick="updateStatus('Em Reunião')">Em Reunião 🔴</button>
+    <button class='externo' onclick="updateStatus('Externo')">Externo 🟡</button>
+    <br>
+    <h3>📅 Próximas Reuniões:</h3>
+    <div id="eventos-container">
+        <div id="eventos-lista"></div>
+    </div>
+</body>
+</html>
+"""
+
 @app.route('/')
 def home():
     return render_template_string(HTML_PAGE, status=status)
