@@ -1,8 +1,3 @@
-import os
-from flask import Flask, render_template_string
-
-app = Flask(__name__)
-
 HTML_PAGE = """
 <!DOCTYPE html>
 <html lang='pt'>
@@ -92,19 +87,40 @@ HTML_PAGE = """
       </div>
     </div>
 
-    <!-- Gastos Variáveis -->
+    <!-- Gastos Variáveis com Filtro -->
     <div class="section">
       <h2>🛒 Gastos Variáveis</h2>
+
+      <!-- Filtro de Período -->
+      <div class="row mb-3">
+        <div class="col-md-3 mb-3">
+          <label class="form-label">Data Início</label>
+          <input type="date" id="startDate" class="form-control">
+        </div>
+        <div class="col-md-3 mb-3">
+          <label class="form-label">Data Fim</label>
+          <input type="date" id="endDate" class="form-control">
+        </div>
+        <div class="col-md-2 align-self-end mb-3">
+          <button id="btnClearFilter" class="btn btn-secondary w-100">Limpar Filtro</button>
+        </div>
+      </div>
+
+      <!-- Formulário de Lançamento -->
       <div class="row align-items-end">
-        <div class="col-md-4 mb-3">
+        <div class="col-md-3 mb-3">
+          <label class="form-label">Data</label>
+          <input type="date" id="dateVar" class="form-control">
+        </div>
+        <div class="col-md-3 mb-3">
           <label class="form-label">Descrição</label>
           <input type="text" id="descVar" class="form-control" placeholder="Ex: Cinema, Lazer...">
         </div>
-        <div class="col-md-3 mb-3">
+        <div class="col-md-2 mb-3">
           <label class="form-label">Valor (R$)</label>
           <input type="number" id="valVar" class="form-control">
         </div>
-        <div class="col-md-3 mb-3">
+        <div class="col-md-2 mb-3">
           <label class="form-label">Categoria</label>
           <select id="catVar" class="form-select">
             <option>Lazer</option>
@@ -118,9 +134,13 @@ HTML_PAGE = """
           <button id="btnAddVar" class="btn btn-success w-100">Adicionar Gasto</button>
         </div>
       </div>
+
+      <!-- Tabela de Gastos -->
       <table class="table table-bordered mt-3">
         <thead>
-          <tr><th>Data</th><th>Descrição</th><th>Categoria</th><th>Valor (R$)</th><th>Ações</th></tr>
+          <tr>
+            <th>Data</th><th>Descrição</th><th>Categoria</th><th>Valor (R$)</th><th>Ações</th>
+          </tr>
         </thead>
         <tbody id="tableVar"></tbody>
       </table>
@@ -132,46 +152,39 @@ HTML_PAGE = """
       <div class="row text-center">
         <div class="col-md-3 mb-3">
           <div class="card p-3">
-            <div class="card-value" id="rendaTotal">R$ 0,00</div>
-            <div>Renda Total</div>
+            <div class="card-value" id="rendaTotal">R$ 0,00</div><div>Renda Total</div>
           </div>
         </div>
         <div class="col-md-3 mb-3">
           <div class="card p-3">
-            <div class="card-value" id="gastosTotais">R$ 0,00</div>
-            <div>Gastos Totais</div>
+            <div class="card-value" id="gastosTotais">R$ 0,00</div><div>Gastos Totais</div>
           </div>
         </div>
         <div class="col-md-3 mb-3">
           <div class="card p-3">
-            <div class="card-value" id="paraInvestir">R$ 0,00</div>
-            <div>Para Investir</div>
+            <div class="card-value" id="paraInvestir">R$ 0,00</div><div>Para Investir</div>
           </div>
         </div>
         <div class="col-md-3 mb-3">
           <div class="card p-3">
-            <div class="card-value" id="saldoFinal">R$ 0,00</div>
-            <div>Saldo Final</div>
+            <div class="card-value" id="saldoFinal">R$ 0,00</div><div>Saldo Final</div>
           </div>
         </div>
       </div>
       <div class="row text-center mt-3">
         <div class="col-md-4 mb-3">
           <div class="card p-2">
-            <div class="card-value" id="reservaVal">R$ 0,00</div>
-            <div>Reserva de Emergência</div>
+            <div class="card-value" id="reservaVal">R$ 0,00</div><div>Reserva de Emergência</div>
           </div>
         </div>
         <div class="col-md-4 mb-3">
           <div class="card p-2">
-            <div class="card-value" id="fixaVal">R$ 0,00</div>
-            <div>Renda Fixa</div>
+            <div class="card-value" id="fixaVal">R$ 0,00</div><div>Renda Fixa</div>
           </div>
         </div>
         <div class="col-md-4 mb-3">
           <div class="card p-2">
-            <div class="card-value" id="variavelVal">R$ 0,00</div>
-            <div>Renda Variável</div>
+            <div class="card-value" id="variavelVal">R$ 0,00</div><div>Renda Variável</div>
           </div>
         </div>
       </div>
@@ -180,6 +193,7 @@ HTML_PAGE = """
   </div>
 
   <script>
+    // Carrega valores e lista
     function loadData() {
       ['salario','rendaExtra','gAluguel','gContas','gAlimentacao','gTransporte','gOutrosFixos',
        'metaInvest','pctReserva','pctFixa','pctVariavel'].forEach(id => {
@@ -187,55 +201,90 @@ HTML_PAGE = """
         let v = localStorage.getItem(id);
         if (el && v!==null) el.value = v;
       });
-      let gastos = JSON.parse(localStorage.getItem('variaveis')||'[]');
-      gastos.forEach(addRow);
+
+      // dataVar default hoje
+      let dv = document.getElementById('dateVar');
+      if (dv && !dv.value) dv.value = new Date().toISOString().substr(0,10);
+
+      // carrega gastos
+      JSON.parse(localStorage.getItem('variaveis')||'[]').forEach(item=>{
+        addRow(item);
+      });
       updateAll();
     }
 
+    // Salva ao mudar qualquer input
     document.querySelectorAll('input').forEach(inp=>{
       inp.addEventListener('input', e=>{
-        localStorage.setItem(e.target.id, e.target.value);
+        if (e.target.id !== 'dateVar')  // dateVar não precisa ser salvo
+          localStorage.setItem(e.target.id, e.target.value);
         updateAll();
       });
     });
 
+    // Lançar novo gasto
     document.getElementById('btnAddVar').addEventListener('click', ()=>{
+      let iso = document.getElementById('dateVar').value;
       let desc = document.getElementById('descVar').value;
       let val  = parseFloat(document.getElementById('valVar').value)||0;
       let cat  = document.getElementById('catVar').value;
-      if(!desc) return alert('Informe descrição');
-      let item = {date: new Date().toLocaleDateString(), desc, val, cat};
+      if (!desc) return alert('Informe descrição');
+      let display = new Date(iso).toLocaleDateString();
+      let item = { date: display, isoDate: iso, desc, val, cat };
       let arr = JSON.parse(localStorage.getItem('variaveis')||'[]');
       arr.push(item);
       localStorage.setItem('variaveis', JSON.stringify(arr));
       addRow(item);
       updateAll();
-      document.getElementById('descVar').value='';
-      document.getElementById('valVar').value='';
+      document.getElementById('descVar').value = '';
+      document.getElementById('valVar').value = '';
     });
 
+    // Função que filtra pelo período
+    function getFilteredItems() {
+      let all = JSON.parse(localStorage.getItem('variaveis')||'[]');
+      let start = document.getElementById('startDate').value;
+      let end   = document.getElementById('endDate').value;
+      return all.filter(i=>{
+        let d = new Date(i.isoDate);
+        if (start && d < new Date(start)) return false;
+        if (end   && d > new Date(end))   return false;
+        return true;
+      });
+    }
+
+    // Limpa e preenche a tabela segundo filtro
+    function refreshTable() {
+      let tb = document.getElementById('tableVar');
+      tb.innerHTML = '';
+      getFilteredItems().forEach(addRow);
+    }
+
+    // Cria uma linha na tabela (com botão remover)
     function addRow(item) {
       let tr = document.createElement('tr');
-      tr.innerHTML = `<td>${item.date}</td>
-                      <td>${item.desc}</td>
-                      <td>${item.cat}</td>
-                      <td>R$ ${item.val.toFixed(2)}</td>
-                      <td><button class="btn btn-sm btn-danger">Remover</button></td>`;
+      tr.innerHTML = `
+        <td>${item.date}</td>
+        <td>${item.desc}</td>
+        <td>${item.cat}</td>
+        <td>R$ ${item.val.toFixed(2)}</td>
+        <td><button class="btn btn-sm btn-danger">Remover</button></td>`;
       tr.querySelector('button').onclick = ()=>{
         let arr = JSON.parse(localStorage.getItem('variaveis')||'[]')
-                     .filter(i=>!(i.date==item.date && i.desc==item.desc && i.val==item.val));
+                     .filter(i=>!(i.isoDate===item.isoDate && i.desc===item.desc && i.val===item.val));
         localStorage.setItem('variaveis', JSON.stringify(arr));
-        tr.remove();
         updateAll();
       };
       document.getElementById('tableVar').appendChild(tr);
     }
 
+    // Atualiza tabela, totais e cards
     function updateAll() {
+      refreshTable();
       let toNum = id => parseFloat(document.getElementById(id).value)||0;
       let rendaTotal = toNum('salario') + toNum('rendaExtra');
-      let fixos = toNum('gAluguel')+toNum('gContas')+toNum('gAlimentacao')+toNum('gTransporte')+toNum('gOutrosFixos');
-      let vars = JSON.parse(localStorage.getItem('variaveis')||'[]').reduce((s,i)=>s+i.val,0);
+      let fixos = toNum('gAluguel') + toNum('gContas') + toNum('gAlimentacao') + toNum('gTransporte') + toNum('gOutrosFixos');
+      let vars   = getFilteredItems().reduce((s,i)=>s+i.val,0);
       let gastosTotais = fixos + vars;
       let meta = toNum('metaInvest')/100;
       let valorInvestir = rendaTotal * meta;
@@ -244,26 +293,28 @@ HTML_PAGE = """
       let rVar = valorInvestir * toNum('pctVariavel')/100;
       let saldoFinal = rendaTotal - gastosTotais;
 
-      document.getElementById('rendaTotal').innerText = `R$ ${rendaTotal.toFixed(2)}`;
-      document.getElementById('gastosTotais').innerText = `R$ ${gastosTotais.toFixed(2)}`;
-      document.getElementById('paraInvestir').innerText = `R$ ${valorInvestir.toFixed(2)}`;
-      document.getElementById('saldoFinal').innerText = `R$ ${saldoFinal.toFixed(2)}`;
-      document.getElementById('reservaVal').innerText = `R$ ${rRes.toFixed(2)}`;
-      document.getElementById('fixaVal').innerText = `R$ ${rFix.toFixed(2)}`;
-      document.getElementById('variavelVal').innerText = `R$ ${rVar.toFixed(2)}`;
-      document.getElementById('valorInvestir').value = `R$ ${valorInvestir.toFixed(2)}`;
+      document.getElementById('rendaTotal').innerText    = `R$ ${rendaTotal.toFixed(2)}`;
+      document.getElementById('gastosTotais').innerText  = `R$ ${gastosTotais.toFixed(2)}`;
+      document.getElementById('paraInvestir').innerText  = `R$ ${valorInvestir.toFixed(2)}`;
+      document.getElementById('saldoFinal').innerText    = `R$ ${saldoFinal.toFixed(2)}`;
+      document.getElementById('reservaVal').innerText    = `R$ ${rRes.toFixed(2)}`;
+      document.getElementById('fixaVal').innerText       = `R$ ${rFix.toFixed(2)}`;
+      document.getElementById('variavelVal').innerText   = `R$ ${rVar.toFixed(2)}`;
+      document.getElementById('valorInvestir').value     = `R$ ${valorInvestir.toFixed(2)}`;
     }
+
+    // Filtrar em tempo real
+    ['startDate','endDate'].forEach(id=>{
+      document.getElementById(id).addEventListener('change', updateAll);
+    });
+    document.getElementById('btnClearFilter').addEventListener('click', ()=>{
+      document.getElementById('startDate').value = '';
+      document.getElementById('endDate').value   = '';
+      updateAll();
+    });
 
     window.onload = loadData;
   </script>
 </body>
 </html>
 """
-
-@app.route('/')
-def home():
-    return render_template_string(HTML_PAGE)
-
-if __name__ == '__main__':
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host='0.0.0.0', port=port)
