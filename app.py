@@ -1,164 +1,269 @@
-import eventlet
-eventlet.monkey_patch()
-
-from flask import Flask, render_template_string, jsonify, request
-from flask_socketio import SocketIO
 import os
-import json
-from datetime import datetime
-import pytz
-from googleapiclient.discovery import build
-from google.oauth2 import service_account
+from flask import Flask, render_template_string
 
 app = Flask(__name__)
-socketio = SocketIO(app, cors_allowed_origins="*")
 
-status = {"status": "Disponível", "last_updated": "00:00:00"}
-
-# Configuração do Google Calendar
-SCOPES = ['https://www.googleapis.com/auth/calendar.readonly']
-GOOGLE_CREDENTIALS = os.environ.get("GOOGLE_CREDENTIALS")
-
-if not GOOGLE_CREDENTIALS:
-    raise ValueError("Erro: Variável de ambiente GOOGLE_CREDENTIALS não encontrada.")
-
-try:
-    SERVICE_ACCOUNT_INFO = json.loads(GOOGLE_CREDENTIALS)
-    credentials = service_account.Credentials.from_service_account_info(SERVICE_ACCOUNT_INFO, scopes=SCOPES)
-    service = build('calendar', 'v3', credentials=credentials)
-except Exception as e:
-    raise ValueError(f"Erro ao carregar credenciais do Google: {e}")
-
-# ID da Agenda do Google (substitua pelo seu)
-CALENDAR_ID = 'cb703793a8843b777f3d4960bc635e3e4ff95a3b36e2fa4d58facd5bbd261c10@group.calendar.google.com'
-
-def get_calendar_events():
-    """Busca os próximos eventos da agenda do Google."""
-    try:
-        brt = pytz.timezone('America/Sao_Paulo')
-        now = datetime.now(brt).isoformat()  
-        events_result = service.events().list(
-            calendarId=CALENDAR_ID, timeMin=now,
-            maxResults=10, singleEvents=True,
-            orderBy='startTime').execute()
-        events = events_result.get('items', [])
-
-        event_list = []
-        for event in events:
-            start = event['start'].get('dateTime', event['start'].get('date'))
-            local_time = datetime.fromisoformat(start).astimezone(brt)
-            formatted_date = local_time.strftime('%d/%m')
-            formatted_time = local_time.strftime('%H:%M')
-            event_list.append(f"<b>{formatted_date} - {formatted_time}</b> ➜ {event['summary']}")
-
-        return event_list
-    except Exception as e:
-        print(f"Erro ao buscar eventos do Google Calendar: {e}")
-        return ["Erro ao carregar eventos"]
-
-# Página HTML com WebSocket e integração com Google Agenda
 HTML_PAGE = """
 <!DOCTYPE html>
 <html lang='pt'>
 <head>
-    <meta charset='UTF-8'>
-    <meta name='viewport' content='width=device-width, initial-scale=1.0'>
-    <title>Status da Reunião</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
-    <style>
-        body { font-family: Arial, sans-serif; text-align: center; margin-top: 50px; transition: background-color 0.5s; }
-        h1 { color: #333; }
-        button { font-size: 18px; padding: 10px 20px; margin: 10px; cursor: pointer; border: none; border-radius: 5px; }
-        .disponivel { background-color: green; color: white; }
-        .reuniao { background-color: red; color: white; }
-        .externo { background-color: orange; color: white; }
-        #eventos-container { margin-top: 20px; background: white; padding: 10px; border-radius: 8px; box-shadow: 0px 0px 10px rgba(0,0,0,0.1); }
-        #toggle-agenda { margin-top: 20px; background-color: blue; color: white; }
-        #eventos-lista p { font-size: 16px; margin: 5px 0; line-height: 1.5; }
-    </style>
-    <script>
-        var socket = io.connect('https://' + document.domain + ':' + location.port);
-
-        socket.on('status_update', function(data) {
-            document.getElementById('status-text').innerText = 'Status: ' + data.status;
-            document.getElementById('last-updated').innerText = 'Última atualização: ' + data.last_updated;
-            updateBackgroundColor(data.status);
-        });
-
-        function updateStatus(newStatus) {
-            fetch('/update_status', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 'status': newStatus })
-            }).then(response => response.json())
-              .then(data => {
-                  document.getElementById('status-text').innerText = 'Status: ' + data.status;
-                  document.getElementById('last-updated').innerText = 'Última atualização: ' + data.last_updated;
-                  updateBackgroundColor(data.status);
-              });
-        }
-
-        function updateBackgroundColor(status) {
-            if (status === 'Disponível') {
-                document.body.style.backgroundColor = '#d4f8d4';
-            } else if (status === 'Em Reunião') {
-                document.body.style.backgroundColor = '#f5baba';
-            } else if (status === 'Externo') {
-                document.body.style.backgroundColor = '#e5c100';
-            }
-        }
-
-        function atualizarAgenda() {
-            fetch('/get_events')
-                .then(response => response.json())
-                .then(data => {
-                    let eventosLista = document.getElementById('eventos-lista');
-                    eventosLista.innerHTML = "";
-                    data.events.forEach(event => {
-                        let item = document.createElement('p');
-                        item.innerHTML = event;
-                        eventosLista.appendChild(item);
-                    });
-                });
-        }
-
-        // Atualiza a agenda automaticamente a cada 30 segundos
-        setInterval(atualizarAgenda, 30000);
-
-    </script>
+  <meta charset='UTF-8'>
+  <meta name='viewport' content='width=device-width, initial-scale=1'>
+  <title>Controle Financeiro Pessoal</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body { padding: 20px; font-family: Arial, sans-serif; }
+    .section { margin-bottom: 30px; padding: 20px; border: 1px solid #ddd; border-radius: 8px; }
+    .section h2 { font-size: 1.25rem; margin-bottom: 15px; }
+    .card-value { font-size: 1.5rem; font-weight: bold; }
+  </style>
 </head>
-<body onload="updateBackgroundColor('{{ status['status'] }}'); atualizarAgenda();">
-    <h1 id='status-text'>Status: {{ status['status'] }}</h1>
-    <p id='last-updated'>Última atualização: {{ status['last_updated'] }}</p>
-    <button class='disponivel' onclick="updateStatus('Disponível')">Disponível 🟢</button>
-    <button class='reuniao' onclick="updateStatus('Em Reunião')">Em Reunião 🔴</button>
-    <button class='externo' onclick="updateStatus('Externo')">Externo 🟡</button>
-    <br>
-    <h3>📅 Próximas Reuniões:</h3>
-    <div id="eventos-container">
-        <div id="eventos-lista"></div>
+<body>
+  <div class="container">
+
+    <!-- Renda Mensal -->
+    <div class="section">
+      <h2>💰 Renda Mensal</h2>
+      <div class="row">
+        <div class="col-md-6 mb-3">
+          <label class="form-label">Salário CLT (R$)</label>
+          <input type="number" id="salario" class="form-control">
+        </div>
+        <div class="col-md-6 mb-3">
+          <label class="form-label">Renda Extra (R$)</label>
+          <input type="number" id="rendaExtra" class="form-control">
+        </div>
+      </div>
     </div>
+
+    <!-- Gastos Fixos Mensais -->
+    <div class="section">
+      <h2>🏠 Gastos Fixos Mensais</h2>
+      <div class="row">
+        <div class="col-md-4 mb-3">
+          <label class="form-label">Aluguel/Financiamento (R$)</label>
+          <input type="number" id="gAluguel" class="form-control">
+        </div>
+        <div class="col-md-4 mb-3">
+          <label class="form-label">Contas (Luz, Água, Internet) (R$)</label>
+          <input type="number" id="gContas" class="form-control">
+        </div>
+        <div class="col-md-4 mb-3">
+          <label class="form-label">Alimentação (R$)</label>
+          <input type="number" id="gAlimentacao" class="form-control">
+        </div>
+        <div class="col-md-4 mb-3">
+          <label class="form-label">Transporte (R$)</label>
+          <input type="number" id="gTransporte" class="form-control">
+        </div>
+        <div class="col-md-4 mb-3">
+          <label class="form-label">Outros Gastos Fixos (R$)</label>
+          <input type="number" id="gOutrosFixos" class="form-control">
+        </div>
+      </div>
+    </div>
+
+    <!-- Planejamento de Investimentos -->
+    <div class="section">
+      <h2>📈 Planejamento de Investimentos</h2>
+      <div class="row">
+        <div class="col-md-4 mb-3">
+          <label class="form-label">Meta de Investimento (%)</label>
+          <input type="number" id="metaInvest" class="form-control">
+        </div>
+        <div class="col-md-4 mb-3">
+          <label class="form-label">Valor para Investir (R$)</label>
+          <input type="text" id="valorInvestir" class="form-control" readonly>
+        </div>
+      </div>
+      <div class="row">
+        <div class="col-md-4 mb-3">
+          <label class="form-label">Reserva de Emergência (%)</label>
+          <input type="number" id="pctReserva" class="form-control">
+        </div>
+        <div class="col-md-4 mb-3">
+          <label class="form-label">Renda Fixa (%)</label>
+          <input type="number" id="pctFixa" class="form-control">
+        </div>
+        <div class="col-md-4 mb-3">
+          <label class="form-label">Renda Variável (%)</label>
+          <input type="number" id="pctVariavel" class="form-control">
+        </div>
+      </div>
+    </div>
+
+    <!-- Gastos Variáveis -->
+    <div class="section">
+      <h2>🛒 Gastos Variáveis</h2>
+      <div class="row align-items-end">
+        <div class="col-md-4 mb-3">
+          <label class="form-label">Descrição</label>
+          <input type="text" id="descVar" class="form-control" placeholder="Ex: Cinema, Lazer...">
+        </div>
+        <div class="col-md-3 mb-3">
+          <label class="form-label">Valor (R$)</label>
+          <input type="number" id="valVar" class="form-control">
+        </div>
+        <div class="col-md-3 mb-3">
+          <label class="form-label">Categoria</label>
+          <select id="catVar" class="form-select">
+            <option>Lazer</option>
+            <option>Alimentação</option>
+            <option>Transporte</option>
+            <option>Saúde</option>
+            <option>Outros</option>
+          </select>
+        </div>
+        <div class="col-md-2 mb-3">
+          <button id="btnAddVar" class="btn btn-success w-100">Adicionar Gasto</button>
+        </div>
+      </div>
+      <table class="table table-bordered mt-3">
+        <thead>
+          <tr><th>Data</th><th>Descrição</th><th>Categoria</th><th>Valor (R$)</th><th>Ações</th></tr>
+        </thead>
+        <tbody id="tableVar"></tbody>
+      </table>
+    </div>
+
+    <!-- Resumo Financeiro Mensal -->
+    <div class="section">
+      <h2>📊 Resumo Financeiro Mensal</h2>
+      <div class="row text-center">
+        <div class="col-md-3 mb-3">
+          <div class="card p-3">
+            <div class="card-value" id="rendaTotal">R$ 0,00</div>
+            <div>Renda Total</div>
+          </div>
+        </div>
+        <div class="col-md-3 mb-3">
+          <div class="card p-3">
+            <div class="card-value" id="gastosTotais">R$ 0,00</div>
+            <div>Gastos Totais</div>
+          </div>
+        </div>
+        <div class="col-md-3 mb-3">
+          <div class="card p-3">
+            <div class="card-value" id="paraInvestir">R$ 0,00</div>
+            <div>Para Investir</div>
+          </div>
+        </div>
+        <div class="col-md-3 mb-3">
+          <div class="card p-3">
+            <div class="card-value" id="saldoFinal">R$ 0,00</div>
+            <div>Saldo Final</div>
+          </div>
+        </div>
+      </div>
+      <div class="row text-center mt-3">
+        <div class="col-md-4 mb-3">
+          <div class="card p-2">
+            <div class="card-value" id="reservaVal">R$ 0,00</div>
+            <div>Reserva de Emergência</div>
+          </div>
+        </div>
+        <div class="col-md-4 mb-3">
+          <div class="card p-2">
+            <div class="card-value" id="fixaVal">R$ 0,00</div>
+            <div>Renda Fixa</div>
+          </div>
+        </div>
+        <div class="col-md-4 mb-3">
+          <div class="card p-2">
+            <div class="card-value" id="variavelVal">R$ 0,00</div>
+            <div>Renda Variável</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    function loadData() {
+      ['salario','rendaExtra','gAluguel','gContas','gAlimentacao','gTransporte','gOutrosFixos',
+       'metaInvest','pctReserva','pctFixa','pctVariavel'].forEach(id => {
+        let el = document.getElementById(id);
+        let v = localStorage.getItem(id);
+        if (el && v!==null) el.value = v;
+      });
+      let gastos = JSON.parse(localStorage.getItem('variaveis')||'[]');
+      gastos.forEach(addRow);
+      updateAll();
+    }
+
+    document.querySelectorAll('input').forEach(inp=>{
+      inp.addEventListener('input', e=>{
+        localStorage.setItem(e.target.id, e.target.value);
+        updateAll();
+      });
+    });
+
+    document.getElementById('btnAddVar').addEventListener('click', ()=>{
+      let desc = document.getElementById('descVar').value;
+      let val  = parseFloat(document.getElementById('valVar').value)||0;
+      let cat  = document.getElementById('catVar').value;
+      if(!desc) return alert('Informe descrição');
+      let item = {date: new Date().toLocaleDateString(), desc, val, cat};
+      let arr = JSON.parse(localStorage.getItem('variaveis')||'[]');
+      arr.push(item);
+      localStorage.setItem('variaveis', JSON.stringify(arr));
+      addRow(item);
+      updateAll();
+      document.getElementById('descVar').value='';
+      document.getElementById('valVar').value='';
+    });
+
+    function addRow(item) {
+      let tr = document.createElement('tr');
+      tr.innerHTML = `<td>${item.date}</td>
+                      <td>${item.desc}</td>
+                      <td>${item.cat}</td>
+                      <td>R$ ${item.val.toFixed(2)}</td>
+                      <td><button class="btn btn-sm btn-danger">Remover</button></td>`;
+      tr.querySelector('button').onclick = ()=>{
+        let arr = JSON.parse(localStorage.getItem('variaveis')||'[]')
+                     .filter(i=>!(i.date==item.date && i.desc==item.desc && i.val==item.val));
+        localStorage.setItem('variaveis', JSON.stringify(arr));
+        tr.remove();
+        updateAll();
+      };
+      document.getElementById('tableVar').appendChild(tr);
+    }
+
+    function updateAll() {
+      let toNum = id => parseFloat(document.getElementById(id).value)||0;
+      let rendaTotal = toNum('salario') + toNum('rendaExtra');
+      let fixos = toNum('gAluguel')+toNum('gContas')+toNum('gAlimentacao')+toNum('gTransporte')+toNum('gOutrosFixos');
+      let vars = JSON.parse(localStorage.getItem('variaveis')||'[]').reduce((s,i)=>s+i.val,0);
+      let gastosTotais = fixos + vars;
+      let meta = toNum('metaInvest')/100;
+      let valorInvestir = rendaTotal * meta;
+      let rRes = valorInvestir * toNum('pctReserva')/100;
+      let rFix = valorInvestir * toNum('pctFixa')/100;
+      let rVar = valorInvestir * toNum('pctVariavel')/100;
+      let saldoFinal = rendaTotal - gastosTotais;
+
+      document.getElementById('rendaTotal').innerText = `R$ ${rendaTotal.toFixed(2)}`;
+      document.getElementById('gastosTotais').innerText = `R$ ${gastosTotais.toFixed(2)}`;
+      document.getElementById('paraInvestir').innerText = `R$ ${valorInvestir.toFixed(2)}`;
+      document.getElementById('saldoFinal').innerText = `R$ ${saldoFinal.toFixed(2)}`;
+      document.getElementById('reservaVal').innerText = `R$ ${rRes.toFixed(2)}`;
+      document.getElementById('fixaVal').innerText = `R$ ${rFix.toFixed(2)}`;
+      document.getElementById('variavelVal').innerText = `R$ ${rVar.toFixed(2)}`;
+      document.getElementById('valorInvestir').value = `R$ ${valorInvestir.toFixed(2)}`;
+    }
+
+    window.onload = loadData;
+  </script>
 </body>
 </html>
 """
 
 @app.route('/')
 def home():
-    return render_template_string(HTML_PAGE, status=status)
-
-@app.route('/get_events', methods=['GET'])
-def get_events():
-    return jsonify({'events': get_calendar_events()})
-
-@app.route('/update_status', methods=['POST'])
-def update_status():
-    global status
-    data = request.json
-    status["status"] = data.get("status", status["status"])
-    status["last_updated"] = datetime.now(pytz.timezone('America/Sao_Paulo')).strftime('%H:%M:%S')
-    socketio.emit('status_update', status)
-    return jsonify(status)
+    return render_template_string(HTML_PAGE)
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
-    socketio.run(app, host='0.0.0.0', port=port)
+    app.run(host='0.0.0.0', port=port)
